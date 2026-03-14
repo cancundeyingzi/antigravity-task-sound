@@ -80,6 +80,21 @@ npm run compile
 npx @vscode/vsce package --allow-missing-repository
 ```
 
+## 🤖 AI 自动配置
+
+如果你正在使用 Antigravity AI 编程，可以直接复制以下指令发送给 AI，它会自动帮你完成安装配置：
+
+```
+请帮我安装 antigravity-task-sound 扩展，步骤如下：
+1. 克隆仓库：git clone https://github.com/1582182391/antigravity-task-sound.git
+2. 进入目录并安装依赖：cd antigravity-task-sound && npm install
+3. 编译 TypeScript：npx tsc -p .
+4. 打包扩展：npx @vscode/vsce package --allow-missing-repository
+5. 安装生成的 .vsix 文件：通过命令面板 Install from VSIX
+6. 确认我的 Antigravity 启动参数中包含 --remote-debugging-port=9000
+7. 重新加载窗口，确认右下角状态栏显示"CDP 已连接"
+```
+
 ## License
 
 MIT
