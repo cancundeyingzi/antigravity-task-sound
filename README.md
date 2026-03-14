@@ -70,8 +70,6 @@ Antigravity (Electron)          扩展
        │                     🔔 播放声音
 ```
 
-核心检测逻辑借鉴自 [Remoat](https://github.com/optimistengineer/remoat) 项目的 `responseMonitor.ts`。
-
 ## 📝 从源码构建
 
 ```bash
