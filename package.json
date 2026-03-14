@@ -1,0 +1,81 @@
+{
+  "name": "antigravity-task-sound",
+  "displayName": "Antigravity Task Sound",
+  "description": "在 Antigravity AI Agent 完成任务时播放声音通知（支持 CDP 精准检测）",
+  "version": "2.0.0",
+  "publisher": "antigravity-user",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "antigravityTaskSound.testSound",
+        "title": "Antigravity Task Sound: Test Sound"
+      },
+      {
+        "command": "antigravityTaskSound.toggle",
+        "title": "Antigravity Task Sound: Toggle"
+      },
+      {
+        "command": "antigravityTaskSound.connectCdp",
+        "title": "Antigravity Task Sound: Connect CDP"
+      }
+    ],
+    "configuration": {
+      "title": "Antigravity Task Sound",
+      "properties": {
+        "antigravityTaskSound.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用/禁用任务完成声音通知"
+        },
+        "antigravityTaskSound.cdpEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用 CDP 协议检测 AI 回复完成（需要 Antigravity 以 --remote-debugging-port 启动）"
+        },
+        "antigravityTaskSound.cdpPort": {
+          "type": "number",
+          "default": 9000,
+          "description": "Antigravity 的远程调试端口（对应启动参数 --remote-debugging-port 的值）"
+        },
+        "antigravityTaskSound.soundFile": {
+          "type": "string",
+          "default": "",
+          "description": "自定义音效文件路径（.wav），留空使用内置音效"
+        },
+        "antigravityTaskSound.volume": {
+          "type": "number",
+          "default": 50,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "音量 (0-100)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^2.22.0"
+  }
+}

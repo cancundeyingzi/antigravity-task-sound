@@ -1,0 +1,6 @@
+node_modules/
+out/
+*.vsix
+.vscode-test/
+test_cdp.js
+generate-sound.ps1
