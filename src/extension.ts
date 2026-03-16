@@ -11,6 +11,13 @@ let statusBarItem: vscode.StatusBarItem;
 let isEnabled = true;
 let isPersistentAlertEnabled = false;
 let cdpMonitor: CdpMonitor | null = null;
+let outputChannel: vscode.OutputChannel;
+
+function log(msg: string) {
+    if (outputChannel) {
+        outputChannel.appendLine(`[${new Date().toLocaleTimeString()}] ${msg}`);
+    }
+}
 
 // 防抖：避免短时间内重复触发
 let lastPlayTime = 0;
@@ -21,7 +28,10 @@ let alertIntervalId: NodeJS.Timeout | null = null;
 let isAlertActive = false;
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('Antigravity Task Sound v2.1 is now active!');
+    outputChannel = vscode.window.createOutputChannel('Antigravity Task Sound');
+    context.subscriptions.push(outputChannel);
+    
+    log('Antigravity Task Sound v2.1.1 is now active!');
 
     // 读取初始设置
     const config = vscode.workspace.getConfiguration('antigravityTaskSound');
@@ -113,14 +123,15 @@ export function activate(context: vscode.ExtensionContext) {
                     if (!cdpMonitor) {
                         cdpMonitor = new CdpMonitor(port, () => {
                             if (isEnabled) { triggerAlert(context); }
-                        });
+                        }, outputChannel);
                         cdpMonitor.setStatusBar(statusBarItem);
                     }
+                    outputChannel.show(true);
                     const connected = await cdpMonitor.connect();
                     if (connected) {
                         vscode.window.showInformationMessage('✅ CDP 连接成功！');
                     } else {
-                        vscode.window.showWarningMessage(`❌ CDP 连接失败。请确保启动参数含 --remote-debugging-port=${port}`);
+                        vscode.window.showWarningMessage(`❌ CDP 连接失败，详情请看 Output 面板`);
                     }
                 }
             }
@@ -154,13 +165,15 @@ export function activate(context: vscode.ExtensionContext) {
             const port = vscode.workspace.getConfiguration('antigravityTaskSound').get<number>('cdpPort', 9000);
             cdpMonitor = new CdpMonitor(port, () => {
                 if (isEnabled) { triggerAlert(context); }
-            });
+            }, outputChannel);
             cdpMonitor.setStatusBar(statusBarItem);
+            
+            outputChannel.show(true);
             const connected = await cdpMonitor.connect();
             if (connected) {
                 vscode.window.showInformationMessage('✅ CDP 连接成功！');
             } else {
-                vscode.window.showWarningMessage(`❌ CDP 连接失败。请确保 Antigravity 以 --remote-debugging-port=${port} 启动`);
+                vscode.window.showWarningMessage(`❌ CDP 连接失败，详情请看 Output 面板`);
             }
         })
     );
@@ -204,16 +217,17 @@ export function activate(context: vscode.ExtensionContext) {
 
     // ======== 自动连接 CDP ========
     if (cdpEnabled) {
+        log('Will auto-connect CDP in 3 seconds...');
         setTimeout(async () => {
             cdpMonitor = new CdpMonitor(cdpPort, () => {
                 if (isEnabled) { triggerAlert(context); }
-            });
+            }, outputChannel);
             cdpMonitor.setStatusBar(statusBarItem);
             const connected = await cdpMonitor.connect();
             if (connected) {
-                console.log('[TaskSound] CDP auto-connected');
+                log('CDP auto-connected successfully.');
             } else {
-                console.log('[TaskSound] CDP auto-connect failed, falling back to terminal events');
+                log('CDP auto-connect failed, falling back to terminal events.');
                 updateStatusBar();
             }
         }, 3000);
@@ -354,12 +368,15 @@ function updateStatusBar() {
     if (isPersistentAlertEnabled) {
         text += ' 🔁';
     }
+    
+    // 增加版本号显示
+    text += ' v2.1.3';
+    
     statusBarItem.text = text;
     statusBarItem.tooltip = [
         `声音通知：${isEnabled ? '已开启' : '已关闭'}`,
         `持续提醒：${isPersistentAlertEnabled ? '已开启' : '已关闭'}`,
-        `CDP：${cdpMonitor?.isConnected() ? '已连接' : '未连接'}`,
-        '点击打开设置菜单',
+        '点击打开设置菜单'
     ].join('\n');
 }
 

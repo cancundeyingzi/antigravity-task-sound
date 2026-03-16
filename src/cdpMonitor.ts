@@ -73,19 +73,32 @@ export class CdpMonitor {
     private port: number;
     private onComplete: (() => void) | null = null;
     private statusBarItem: vscode.StatusBarItem | null = null;
+    private outputChannel: vscode.OutputChannel;
     private connectionAttempts = 0;
     private readonly maxReconnectAttempts = 5;
 
-    constructor(port: number, onComplete: () => void) {
+    constructor(port: number, onComplete: () => void, outputChannel: vscode.OutputChannel) {
         this.port = port;
         this.onComplete = onComplete;
+        this.outputChannel = outputChannel;
     }
 
     setStatusBar(item: vscode.StatusBarItem) {
         this.statusBarItem = item;
     }
 
+    private log(message: string) {
+        console.log(`[TaskSound:CDP] ${message}`);
+        this.outputChannel.appendLine(`[${new Date().toLocaleTimeString()}] ${message}`);
+    }
+
+    private error(message: string, err?: any) {
+        console.error(`[TaskSound:CDP] ${message}`, err || '');
+        this.outputChannel.appendLine(`[${new Date().toLocaleTimeString()}] ERROR: ${message} ${err ? (err.message || err.toString()) : ''}`);
+    }
+
     updatePort(port: number) {
+        this.log(`Updating port from ${this.port} to ${port}`);
         this.port = port;
         if (this.isRunning) {
             this.disconnect();
@@ -95,39 +108,50 @@ export class CdpMonitor {
 
     async connect(): Promise<boolean> {
         try {
+            this.log(`Connecting to CDP on port ${this.port}...`);
             const targets = await this.getTargets();
             if (!targets || targets.length === 0) {
-                console.log('[TaskSound:CDP] No debug targets found');
+                this.error('No debug targets found.');
                 return false;
             }
 
+            this.log(`Found ${targets.length} targets.`);
+            targets.forEach((t: CdpTarget, i: number) => {
+                this.log(`  [${i}] ${t.type} | title: ${t.title || 'N/A'} | url: ${t.url || 'N/A'}`);
+            });
+
+            // 修复过滤逻辑：找非 launchpad、非 jetski 的 workbench.html
             const target = targets.find(
-                (t: CdpTarget) => t.type === 'page' && (
-                    (t.url?.includes('workbench.html') && !t.url?.includes('jetski'))
-                )
+                (t: CdpTarget) => t.type === 'page' && 
+                                  !t.url?.includes('jetski') && 
+                                  !t.title.includes('Launchpad') &&
+                                  t.url?.includes('workbench.html')
             ) || targets.find(
-                (t: CdpTarget) => t.type === 'page' && (
-                    t.title.includes('Antigravity') &&
-                    !t.title.includes('Launchpad')
-                )
+                (t: CdpTarget) => t.type === 'page' && 
+                                  !t.url?.includes('jetski') && 
+                                  !t.title.includes('Launchpad')
             ) || targets.find((t: CdpTarget) => t.type === 'page') || targets[0];
 
             if (!target?.webSocketDebuggerUrl) {
-                console.log('[TaskSound:CDP] No WebSocket URL found');
+                this.error('No WebSocket URL found in selected target.');
                 return false;
             }
+
+            this.log(`Selected target: ${target.url || target.id}`);
+            this.log(`WebSocket URL: ${target.webSocketDebuggerUrl}`);
 
             const WebSocket = require('ws');
             this.ws = new WebSocket(target.webSocketDebuggerUrl);
 
             return new Promise<boolean>((resolve) => {
                 const timeout = setTimeout(() => {
+                    this.error('WebSocket connection timeout');
                     resolve(false);
                 }, 5000);
 
                 this.ws.on('open', () => {
                     clearTimeout(timeout);
-                    console.log('[TaskSound:CDP] Connected!');
+                    this.log('WebSocket Connected successfully!');
                     this.isRunning = true;
                     this.connectionAttempts = 0;
                     this.updateStatusText('$(bell) CDP 已连接');
@@ -147,25 +171,26 @@ export class CdpMonitor {
                 });
 
                 this.ws.on('close', () => {
-                    console.log('[TaskSound:CDP] Disconnected');
+                    this.log('WebSocket Disconnected');
                     this.isRunning = false;
                     this.updateStatusText('$(bell-slash) CDP 断开');
                     this.scheduleReconnect();
                 });
 
                 this.ws.on('error', (err: Error) => {
-                    console.error('[TaskSound:CDP] Error:', err.message);
+                    this.error('WebSocket Error', err);
                     clearTimeout(timeout);
                     resolve(false);
                 });
             });
         } catch (err) {
-            console.error('[TaskSound:CDP] Connect failed:', err);
+            this.error('Connect failed', err);
             return false;
         }
     }
 
     disconnect() {
+        this.log('Disconnecting from CDP...');
         this.isRunning = false;
         if (this.pollTimer) {
             clearTimeout(this.pollTimer);
@@ -196,12 +221,12 @@ export class CdpMonitor {
         if (this.reconnectTimer) return;
         this.connectionAttempts++;
         if (this.connectionAttempts > this.maxReconnectAttempts) {
-            console.log('[TaskSound:CDP] Max reconnect attempts reached');
+            this.log('Max reconnect attempts reached. Will stop retrying automatically.');
             this.updateStatusText('$(bell-slash) CDP 连接失败');
             return;
         }
         const delay = Math.min(5000 * this.connectionAttempts, 30000);
-        console.log(`[TaskSound:CDP] Reconnecting in ${delay}ms (attempt ${this.connectionAttempts})`);
+        this.log(`Reconnecting in ${delay}ms (attempt ${this.connectionAttempts})...`);
         this.reconnectTimer = setTimeout(async () => {
             this.reconnectTimer = null;
             await this.connect();
@@ -210,19 +235,42 @@ export class CdpMonitor {
 
     private getTargets(): Promise<CdpTarget[] | null> {
         return new Promise((resolve) => {
-            const req = http.get(`http://127.0.0.1:${this.port}/json/list`, (res) => {
+            const options = {
+                hostname: '127.0.0.1',
+                port: this.port,
+                path: '/json/list',
+                method: 'GET',
+                family: 4 // Force IPv4
+            };
+            
+            this.log(`Fetching targets from ${options.hostname}:${options.port}...`);
+            const req = http.request(options, (res) => {
                 let data = '';
                 res.on('data', (chunk: string) => { data += chunk; });
                 res.on('end', () => {
+                    if (res.statusCode !== 200) {
+                        this.log(`HTTP status ${res.statusCode} from CDP endpoint`);
+                        resolve(null);
+                        return;
+                    }
                     try {
                         resolve(JSON.parse(data));
-                    } catch {
+                    } catch (e) {
+                        this.error('Failed to parse CDP targets JSON', e);
                         resolve(null);
                     }
                 });
             });
-            req.on('error', () => resolve(null));
-            req.setTimeout(3000, () => { req.destroy(); resolve(null); });
+            req.on('error', (e) => {
+                this.error('HTTP request to CDP failed', e);
+                resolve(null);
+            });
+            req.setTimeout(3000, () => {
+                this.error('HTTP request to CDP timed out');
+                req.destroy();
+                resolve(null); 
+            });
+            req.end();
         });
     }
 
@@ -235,6 +283,7 @@ export class CdpMonitor {
             const id = this.messageId++;
             const timeout = setTimeout(() => {
                 this.pendingCallbacks.delete(id);
+                // Do not log routine timeouts to avoid spam
                 reject(new Error('CDP command timeout'));
             }, 5000);
 
@@ -268,31 +317,29 @@ export class CdpMonitor {
             const isGenerating = value?.isGenerating === true;
 
             if (isGenerating) {
-                // AI 正在生成
                 if (!this.generationStarted) {
                     this.generationStarted = true;
-                    console.log('[TaskSound:CDP] AI generation started');
+                    this.log('AI generation started');
                     this.updateStatusText('$(loading~spin) AI 生成中...');
                 }
                 this.stopGoneCount = 0;
             } else if (this.generationStarted) {
-                // 停止按钮消失了
                 this.stopGoneCount++;
                 if (this.stopGoneCount >= this.stopGoneConfirmCount) {
-                    // 确认：AI 回复完成！
-                    console.log('[TaskSound:CDP] AI response complete!');
+                    this.log('AI response complete!');
                     this.generationStarted = false;
                     this.stopGoneCount = 0;
                     this.updateStatusText('$(bell) CDP 已连接');
 
-                    // 触发回调
                     if (this.onComplete) {
                         this.onComplete();
                     }
                 }
             }
         } catch (err) {
-            console.error('[TaskSound:CDP] Poll error:', err);
+            // CDP 偶尔命令超时是正常的，不输出大段错误
+            // console.error('[TaskSound:CDP] Poll error:', err);
         }
     }
 }
+

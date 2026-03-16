@@ -2,8 +2,8 @@
   "name": "antigravity-task-sound",
   "displayName": "Antigravity Task Sound",
   "description": "Play sound notifications when Antigravity AI Agent completes a response (CDP-based detection)",
-  "version": "2.1.0",
-  "publisher": "antigravity-user",
+  "version": "2.1.3",
+  "publisher": "1582182391",
   "icon": "icon.png",
   "license": "MIT",
   "repository": {
