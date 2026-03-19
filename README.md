@@ -88,7 +88,7 @@ Antigravity (Electron)          Extension
 ## 📝 Build from Source / 从源码构建
 
 ```bash
-git clone https://github.com/1582182391/antigravity-task-sound.git
+git clone https://github.com/liukunpeng0316/antigravity-task-sound.git
 cd antigravity-task-sound
 npm install
 npm run compile
