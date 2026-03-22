@@ -1,8 +1,7 @@
 import * as http from 'http';
 import * as vscode from 'vscode';
+import WebSocket from 'ws';
 import { t } from './i18n';
-
-declare const console: any;
 
 /**
  * CDP (Chrome DevTools Protocol) 监控器
@@ -223,9 +222,8 @@ export class CdpMonitor {
         this.windowTitle = windowTitle;
     }
 
-    updateWindowTitle(title: string) {
-        this.windowTitle = title;
-    }
+ 
+
 
     setStatusBar(item: vscode.StatusBarItem) {
         this.statusBarItem = item;
@@ -265,9 +263,9 @@ export class CdpMonitor {
             });
 
             // 多窗口支持：优先匹配当前窗口标题对应的 target
-            const isValidTarget = (t: CdpTarget) => 
-                t.type === 'page' && 
-                !t.url?.includes('jetski') && 
+            const isValidTarget = (t: CdpTarget) =>
+                t.type === 'page' &&
+                !t.url?.includes('jetski') &&
                 !t.title.includes('Launchpad');
 
             let target: CdpTarget | undefined;
@@ -276,15 +274,15 @@ export class CdpMonitor {
             if (this.windowTitle) {
                 this.log(`Searching for target matching window title: "${this.windowTitle}"`);
                 target = targets.find(
-                    (t: CdpTarget) => isValidTarget(t) && 
-                                      t.url?.includes('workbench.html') &&
-                                      t.title.includes(this.windowTitle)
+                    (t: CdpTarget) => isValidTarget(t) &&
+                        t.url?.includes('workbench.html') &&
+                        t.title.includes(this.windowTitle)
                 );
                 // 备选：匹配标题但不限 workbench.html
                 if (!target) {
                     target = targets.find(
-                        (t: CdpTarget) => isValidTarget(t) && 
-                                          t.title.includes(this.windowTitle)
+                        (t: CdpTarget) => isValidTarget(t) &&
+                            t.title.includes(this.windowTitle)
                     );
                 }
                 if (target) {
@@ -310,7 +308,6 @@ export class CdpMonitor {
             this.log(`Selected target: ${target.url || target.id}`);
             this.log(`WebSocket URL: ${target.webSocketDebuggerUrl}`);
 
-            const WebSocket = require('ws');
             this.ws = new WebSocket(target.webSocketDebuggerUrl);
 
             return new Promise<boolean>((resolve) => {
@@ -412,7 +409,7 @@ export class CdpMonitor {
                 method: 'GET',
                 family: 4 // Force IPv4
             };
-            
+
             this.log(`Fetching targets from ${options.hostname}:${options.port}...`);
             const req = http.request(options, (res) => {
                 let data = '';
@@ -438,7 +435,7 @@ export class CdpMonitor {
             req.setTimeout(3000, () => {
                 this.error('HTTP request to CDP timed out');
                 req.destroy();
-                resolve(null); 
+                resolve(null);
             });
             req.end();
         });
@@ -528,8 +525,16 @@ export class CdpMonitor {
                 // Prompt dismissed → reset state for next detection
                 this.promptActive = false;
                 this.log('Prompt dismissed, state reset.');
-                if (this.isRunning && !isGenerating) {
-                    this.updateStatusText(`$(bell) ${t('cdp.connected')}`);
+                if (this.isRunning) {
+                    if (isGenerating) {
+                        // 用户处理完提示框后 AI 仍在生成 → 恢复为 "AI 生成中" 状态
+                        // AI is still generating after prompt dismissed → restore generating status
+                        this.updateStatusText(`$(loading~spin) ${t('cdp.generating')}`);
+                    } else {
+                        // AI 未在生成 → 恢复为空闲已连接状态
+                        // AI is idle → restore to connected status
+                        this.updateStatusText(`$(bell) ${t('cdp.connected')}`);
+                    }
                 }
             }
         } catch (err) {
